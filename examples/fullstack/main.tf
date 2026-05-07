@@ -28,25 +28,28 @@ module "stack" {
   # Keep it short (RDS identifiers can't be too long) and lowercase-with-hyphens.
   name = "blueprints-fs"
 
-  # The default nginx image lets you verify the ALB → ECS path works.
-  # Once verified, swap in your real app image.
-  container_image = "nginx:alpine"
-  container_port  = 80
+  # Adminer is a tiny public DB admin UI. It proves the whole path works:
+  # browser -> ALB -> ECS task -> RDS. After deploy, open the ALB URL, log in
+  # with the RDS credentials, and you can run real SQL against your database.
+  # Swap to your own image (e.g. an ECR URI) when you have one to deploy.
+  container_image = "adminer:latest"
+  container_port  = 8080 # adminer listens on 8080
   desired_count   = 1
   task_cpu        = 256
   task_memory     = 512
 
-  health_check_path = "/"
-
+  # Adminer pre-fills the System/Server fields when these env vars are set,
+  # so you only need to type the username/password on the login page.
   container_environment = {
-    LOG_LEVEL = "info"
-    # Your app should read DB_HOST / DB_PORT / DB_NAME / DB_USER from env,
-    # and parse DB_CREDENTIALS_JSON (injected from Secrets Manager) for the password.
+    ADMINER_DEFAULT_SERVER = "" # set after first apply if you want it pre-filled
+    ADMINER_DESIGN         = "dracula"
   }
+
+  health_check_path = "/"
 
   # ----- Database -----
   db_engine            = "postgres"
-  db_engine_version    = "16.3"      # Pick a version supported in ap-southeast-1
+  db_engine_version    = "16.13"     # Latest 16.x in ap-southeast-1 as of 2026-05
   db_instance_class    = "db.t4g.micro" # Cheapest current-gen
   db_allocated_storage = 20          # gp3 minimum
   db_name              = "appdb"     # Initial database created on the instance

@@ -63,6 +63,12 @@ variable "log_retention_days" {
   default     = 7
 }
 
+variable "deregistration_delay" {
+  description = "Seconds the ALB waits before deregistering a target. Lower = faster destroys/deploys. AWS default is 300; we use 30 for demo speed. Bump back up for production."
+  type        = number
+  default     = 30
+}
+
 variable "tags" {
   description = "Tags applied to all resources created by this module."
   type        = map(string)

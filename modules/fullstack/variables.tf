@@ -64,6 +64,12 @@ variable "log_retention_days" {
   default     = 7
 }
 
+variable "deregistration_delay" {
+  description = "Seconds the ALB waits before deregistering a target. Lower = faster destroys/deploys. AWS default is 300; we use 30 for demo speed. Bump back up for production."
+  type        = number
+  default     = 30
+}
+
 # ---------- RDS ----------
 variable "db_engine" {
   description = "RDS engine. postgres or mysql are typical."
@@ -72,9 +78,9 @@ variable "db_engine" {
 }
 
 variable "db_engine_version" {
-  description = "RDS engine version. Pick one supported by AWS in your region."
+  description = "RDS engine version. Pick one currently supported by AWS in your region. Check with: aws rds describe-db-engine-versions --engine postgres --region <region> --query 'DBEngineVersions[].EngineVersion'"
   type        = string
-  default     = "16.3"
+  default     = "16.13"
 }
 
 variable "db_instance_class" {

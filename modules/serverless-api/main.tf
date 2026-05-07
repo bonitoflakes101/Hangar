@@ -16,25 +16,12 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 # ---------- Default Lambda code (used if the caller does not supply a zip) ----------
+# The handler is in lambda/index.js — content negotiates: returns a styled HTML page
+# for browsers (Accept: text/html), JSON for everyone else.
 data "archive_file" "default" {
   type        = "zip"
   output_path = "${path.module}/default-lambda.zip"
-
-  source {
-    filename = "index.js"
-    content  = <<-EOT
-      exports.handler = async (event) => ({
-        statusCode: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Hello from Lambda!",
-          path: event.rawPath || "/",
-          method: event.requestContext && event.requestContext.http && event.requestContext.http.method,
-          time: new Date().toISOString()
-        })
-      });
-    EOT
-  }
+  source_file = "${path.module}/lambda/index.js"
 }
 
 locals {

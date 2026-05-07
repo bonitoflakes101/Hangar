@@ -98,7 +98,7 @@ resource "aws_route_table_association" "private" {
 # ---------- Security groups ----------
 resource "aws_security_group" "alb" {
   name        = "${var.name}-alb-sg"
-  description = "ALB — allow HTTP from internet"
+  description = "ALB - allow HTTP from internet"
   vpc_id      = aws_vpc.this.id
 
   ingress {
@@ -121,7 +121,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "tasks" {
   name        = "${var.name}-tasks-sg"
-  description = "ECS tasks — allow only from ALB"
+  description = "ECS tasks - allow only from ALB"
   vpc_id      = aws_vpc.this.id
 
   ingress {
@@ -158,6 +158,11 @@ resource "aws_lb_target_group" "this" {
   protocol    = "HTTP"
   vpc_id      = aws_vpc.this.id
   target_type = "ip"
+
+  # Short deregistration drain - speeds up `terraform destroy` and ECS
+  # deployments at the cost of cutting in-flight requests sooner. Bump back
+  # toward 300 (the AWS default) for production traffic.
+  deregistration_delay = var.deregistration_delay
 
   health_check {
     path                = var.health_check_path
@@ -249,7 +254,7 @@ resource "aws_ecs_task_definition" "this" {
       logDriver = "awslogs"
       options = {
         awslogs-group         = aws_cloudwatch_log_group.this.name
-        awslogs-region        = data.aws_region.current.name
+        awslogs-region        = data.aws_region.current.region
         awslogs-stream-prefix = "ecs"
       }
     }
