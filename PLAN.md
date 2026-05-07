@@ -1,6 +1,6 @@
 # Hangar — Implementation Plan
 
-**Status:** Planning complete, not yet started
+**Status:** §7 pre-flight complete (modules sniff-tested, runner spike validated). Ready to scaffold.
 **Last updated:** 2026-05-07
 **Scope:** Personal-use tool for the repo owner. Single-user, single-machine, local-first. Not a product.
 
@@ -44,7 +44,7 @@ The atomic palette + smart-edge work moves to v2 once the lifecycle pipeline (co
 
 ## 1. Repo layout
 
-Existing `modules/` and `examples/` stay untouched. Add the app alongside as a pnpm workspace.
+Existing `modules/` and `examples/` stay untouched. Add the app alongside as a npm workspace.
 
 ```
 Hangar/
@@ -79,7 +79,7 @@ Hangar/
 │       └── package.json
 ├── packages/
 │   └── shared/                 # TS types shared between web and server
-├── pnpm-workspace.yaml
+├── npm-workspace.yaml
 ├── package.json
 ├── tsconfig.base.json
 ├── PLAN.md                     # this file
@@ -190,7 +190,7 @@ Each milestone ends with something **end-to-end functional**, not "infrastructur
 Goal: open Hangar, click "+ New stack → Static Site", configure the bucket name, hit Apply, see it on AWS, hit Destroy, see it gone.
 
 **Server**
-- pnpm workspace, Fastify + tsx-watch for dev
+- npm workspace, Fastify + tsx-watch for dev
 - SQLite migrations runner
 - `POST /stacks` — create stack row + scaffold filesystem dir + write minimal `graph.json` and `terraform.tf` (provider + local backend)
 - `POST /stacks/:id/runs` — body `{ type: plan | apply | destroy }`, spawns terraform, streams logs to file, updates run row
@@ -297,6 +297,8 @@ function compile(graph: Graph, stack: Stack): { mainTf: string; terraformTf: str
 
 `renderModuleBlock` is template-string HCL emission. Strings escaped via `JSON.stringify` (works for HCL too); numbers/bools passthrough; maps/lists recursive. Snapshot tests against golden files from day one.
 
+**fmt post-pass:** after `compile()`, run `terraform fmt -write=true main.tf` in the stack dir. This gives canonical HCL formatting for free and removes the burden of perfect alignment in the templater. (Confirmed in §7.5 — `terraform fmt` flagged only cosmetic whitespace on the spike-generated files, no syntax issues.)
+
 In v2 the compiler grows: topo sort, smart-edge passes, IAM/SG injection.
 
 ### Terraform runner (`apps/server/src/terraform/runner.ts`)
@@ -344,11 +346,13 @@ Don't read credentials directly; let terraform's AWS provider chain handle SSO/r
 
 **For v1: zero new modules.** The existing four composites are the v1 palette.
 
-Light touch-ups during the build (~30 min each):
+**Update from §7.5: all three originally-planned touch-ups are unnecessary.** Confirmed by sniff test:
 
-1. Add `ManagedBy = "hangar"`, `Stack = var.stack_name`, `Owner = var.owner` to default tags in each module's `variables.tf`. Compiler always passes these. Lets Cost Explorer filter cleanly.
-2. Add `outputs.tf` entries per module for the **few outputs Hangar should surface** in the Outputs panel — e.g. for `fullstack`: `alb_dns_name`, `db_endpoint`, `db_secret_arn`. Most likely already present; just confirm.
-3. Confirm each module accepts a unique-name input (e.g. `name_prefix`) so two stacks of the same type don't collide on AWS-global names (S3 buckets, IAM roles). Compiler passes the stack id.
+1. ~~Add `ManagedBy/Stack/Owner` to default tags~~ — every module already accepts a `tags` map that propagates to all resources. Compiler passes `{ManagedBy, Stack, Owner, Environment}` through `tags`. No module edits needed.
+2. ~~Add outputs to surface in UI~~ — already present: `cloudfront_url` (static-site), `api_endpoint` (serverless-api), `alb_url` (ecs-fargate), `alb_url`/`db_endpoint`/`db_secret_arn`/`db_secret_name` (fullstack).
+3. ~~Confirm unique-name input~~ — every module takes `name` (or `bucket_name` for static-site) as a prefix. Compiler passes the stack id.
+
+**Net effect:** the Terraform side is already production-ready for v1. All weekend-1/2/3 effort is pure app code.
 
 **For v2:** the 15 atomic modules — separate planning exercise.
 
@@ -358,11 +362,11 @@ Light touch-ups during the build (~30 min each):
 
 In rough order of "I'd test this in week 1":
 
-1. **Terraform output streaming on macOS.** Line-buffering can hold output back for minutes. Validate by running an actual `apply` against AWS through the runner and watching live log latency. If chunks lag, confirm `TF_IN_AUTOMATION=1` is enough; `unbuffer` isn't on macOS by default.
+1. **Terraform output streaming on macOS.** Line-buffering can hold output back for minutes. Validate by running an actual `apply` against AWS through the runner and watching live log latency. If chunks lag, confirm `TF_IN_AUTOMATION=1` is enough; `unbuffer` isn't on macOS by default. **✓ Mitigated 2026-05-07** — runner spike streamed 246 lines for `terraform plan` with max inter-line gap 2.2s (within tolerance, attributable to AWS state-refresh pause). `TF_IN_AUTOMATION=1 TF_INPUT=0 -no-color` suffices, no `unbuffer` needed.
 
 2. **HCL emission edge cases.** Strings with quotes/backticks/newlines, sensitive vars, maps with mixed types. Mitigation: snapshot/golden tests for the compiler from day one (`tests/compiler/static-site.golden.tf`). Run `terraform fmt -check` against compiler output.
 
-3. **Module path resolution.** Generated `main.tf` lives at `~/.hangar/stacks/<id>/main.tf`. `source = "../../modules/static-site"` won't resolve there. **Decision: absolute paths with a `HANGAR_MODULES_DIR` configured at first run.** No symlinks. Validate in week 1.
+3. **Module path resolution.** Generated `main.tf` lives at `~/.hangar/stacks/<id>/main.tf`. `source = "../../modules/static-site"` won't resolve there. **Decision: absolute paths with a `HANGAR_MODULES_DIR` configured at first run.** No symlinks. Validate in week 1. **✓ Mitigated 2026-05-07** — all four composite modules init+plan cleanly when called via absolute path from a scratch dir at `.hangar-spike/sniff/<module>/`. Approach is confirmed.
 
 4. **AWS credential chain with SSO.** SSO sessions expire mid-apply. Test with a real SSO profile, let it expire, confirm the UI surfaces a useful error (not just an exit code).
 
@@ -393,9 +397,54 @@ A 50-line Node script that spawns `terraform plan` + `apply` + `destroy` against
 
 ---
 
+## 7.5 Pre-flight results (2026-05-07)
+
+### Check 1 — Module sniff test: PASSED
+
+| Module | init | plan | resources | tags wire through | outputs resolve |
+|---|---|---|---|---|---|
+| static-site | ✓ | ✓ | 7 | ✓ | ✓ |
+| serverless-api | ✓ | ✓ | 10 | ✓ | ✓ |
+| ecs-fargate | ✓ | ✓ | 26 | ✓ | ✓ |
+| fullstack | ✓ | ✓ | 38 | ✓ | ✓ |
+
+All four init'd cleanly using absolute module paths. Tags map (`ManagedBy/Stack/Owner/Environment`) propagated to every resource (verified in `tags_all` of plan output). All target outputs resolve.
+
+### Check 2 — Runner spike: PASSED
+
+Plan against `static-site` via `child_process.spawn`:
+
+- elapsed: **2.39s**
+- lines streamed: **246**
+- max inter-line gap: **2.2s** (well under 5s threshold)
+- exit code captured cleanly
+- `terraform show -json plan.tfplan` parsed; classifier produced `{add: 7, change: 0, destroy: 0, replace: 0, read: 1}` — matches the human plan output.
+
+Reference implementation lives at `.hangar-spike/runner/runner-spike.mjs` and can be lifted into `apps/server/src/terraform/runner.ts` largely as-is.
+
+### Plan-summary classifier (canonical action shapes)
+
+`resource_changes[].change.actions` takes these forms:
+
+| Actions array | Bucket |
+|---|---|
+| `["create"]` | add |
+| `["update"]` | change |
+| `["delete"]` | destroy |
+| `["delete", "create"]` | replace |
+| `["read"]` | read (data sources — exclude from diff coloring) |
+| `["no-op"]` | unchanged (exclude) |
+
+### Action items consumed by these results
+
+- §5 Terraform touch-ups: **all unnecessary**, struck through above
+- §4 Compiler: added `terraform fmt -write` post-pass note
+- §6.1, §6.3: marked mitigated above
+- Weekend-1 scope shrinks slightly (no module edits to do)
+
 ## 8. Concrete next step
 
-Run the §7 sanity checks. If both pass, scaffold the pnpm workspace + Fastify health endpoint + Vite app shell. That's the first 90 min of weekend 1.
+§7 pre-flight is **done**. Next: scaffold the npm workspace + Fastify health endpoint + Vite app shell — the first 90 min of weekend 1.
 
 ## Open questions / deferred decisions
 

@@ -44,3 +44,12 @@ terraform.rc
 .idea/
 .vscode/
 *.swp
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Hangar app
+.hangar-spike/
+~/.hangar/

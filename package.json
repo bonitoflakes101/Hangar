@@ -1,0 +1,22 @@
+{
+  "name": "hangar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Personal drag-and-drop UI over Terraform for AWS sandbox stacks.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm -w @hangar/server run dev\" \"npm -w @hangar/web run dev\"",
+    "build": "npm -ws --if-present run build",
+    "typecheck": "npm -ws --if-present run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
