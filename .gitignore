@@ -1,0 +1,46 @@
+# Local .terraform directories
+**/.terraform/*
+
+# Terraform lockfile is normally committed; leave it out of ignore by default.
+# Uncomment if your team prefers not to commit it.
+# .terraform.lock.hcl
+
+# State files — NEVER commit these (may contain secrets)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Override files (local-only)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Plan output files
+*.tfplan
+
+# Example: variable files that might contain secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# CLI configuration / credentials
+.terraformrc
+terraform.rc
+
+# Generated lambda zips
+**/default-lambda.zip
+
+# Environment files
+.env
+.env.*
+
+# Editor / OS junk
+.DS_Store
+.idea/
+.vscode/
+*.swp
